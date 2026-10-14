@@ -1,16 +1,14 @@
 {
   "id": "lab4-private-tasks",
-  "category": "My references",
-  "difficulty": "Beginner",
-  "description": "User-created architecture snapshot.",
-  "learningOutcome": "",
-  "name": "LAB-04-ECS-USMS-ENROLMENT",
+  "title": "Reference request",
+  "description": "Load the course resource layout and explore a supported request path.",
+  "expected": "SUCCESS on the reference request; inspect each recorded decision.",
   "nodes": [
     {
-      "id": "box-vpc",
+      "id": "lab-vpc",
       "type": "boundaryNode",
       "position": {
-        "x": -2,
+        "x": -180,
         "y": 44
       },
       "data": {
@@ -23,19 +21,19 @@
         "simulationStatus": "idle"
       },
       "style": {
-        "width": 1562,
-        "height": 856
+        "width": 1740,
+        "height": 900
       },
       "draggable": true,
       "selectable": true,
       "zIndex": -4,
       "measured": {
-        "width": 1562,
-        "height": 856
+        "width": 1740,
+        "height": 900
       },
       "selected": false,
-      "width": 1562,
-      "height": 856,
+      "width": 1740,
+      "height": 900,
       "resizing": false
     },
     {
@@ -473,7 +471,7 @@
       "id": "node-user",
       "type": "serviceNode",
       "position": {
-        "x": -240,
+        "x": -420,
         "y": 160
       },
       "data": {
@@ -506,11 +504,11 @@
       "id": "node-ecr",
       "type": "serviceNode",
       "position": {
-        "x": -240,
+        "x": -420,
         "y": -60
       },
       "data": {
-        "serviceId": "ecr",
+        "serviceId": "ecr_registry",
         "label": "Amazon ECR Public (public.ecr.aws)",
         "category": "Containers",
         "health": "healthy",
@@ -539,8 +537,8 @@
       "id": "node-igw",
       "type": "serviceNode",
       "position": {
-        "x": -12.261345707050154,
-        "y": 198.9848723905998
+        "x": -140,
+        "y": 200
       },
       "data": {
         "serviceId": "internet_gateway",
@@ -617,7 +615,7 @@
       "type": "serviceNode",
       "position": {
         "x": 578,
-        "y": 204.90762415650707
+        "y": 140
       },
       "data": {
         "serviceId": "nat_gateway",
@@ -1496,8 +1494,8 @@
     }
   ],
   "scenario": {
-    "id": "lab4-enrolment-request",
-    "name": "Student enrolment request",
+    "id": "lab4-private-tasks",
+    "name": "lab4-private-tasks",
     "method": "GET",
     "path": "/",
     "startNodeId": "node-user",
