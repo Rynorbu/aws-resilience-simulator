@@ -1,5 +1,5 @@
 import React, { memo } from 'react';
-import { Handle, Position } from '@xyflow/react';
+import { CompassHandles } from './CompassHandles.tsx';
 import { ServiceNodeData } from '../../types/index.ts';
 import { SERVICE_MAP } from '../../data/serviceCatalog.ts';
 import { AwsServiceIcon } from '../icons/AwsServiceIcons.tsx';
@@ -24,13 +24,13 @@ export const ServiceNode = memo((props: any) => {
   // simulation/failure engines' real `health`/`isSimulating` state, never decorative.
   let iconWrapperClasses = 'transition-all duration-200';
   if (isFailed) {
-    iconWrapperClasses += ' ring-2 ring-rose-500 rounded-lg p-0.5 bg-rose-50';
+    iconWrapperClasses += ' ring-2 ring-rose-500 rounded-lg p-0.5 bg-rose-50 dark:bg-rose-950/60';
   } else if (isSimActive) {
     iconWrapperClasses += ' ring-4 ring-amber-400 rounded-lg p-0.5 shadow-lg shadow-amber-300/60 scale-105';
   } else if (isDegraded) {
-    iconWrapperClasses += ' ring-2 ring-amber-400 rounded-lg p-0.5 bg-amber-50';
+    iconWrapperClasses += ' ring-2 ring-amber-400 rounded-lg p-0.5 bg-amber-50 dark:bg-amber-950/60';
   } else if (selected) {
-    iconWrapperClasses += ' ring-2 ring-circuit-600 rounded-lg p-0.5 shadow-md shadow-circuit-200';
+    iconWrapperClasses += ' ring-2 ring-circuit-600 rounded-lg p-0.5 shadow-md shadow-circuit-200 dark:shadow-circuit-900';
   }
 
   return (
@@ -38,19 +38,7 @@ export const ServiceNode = memo((props: any) => {
       {nodeData.customConfig?.asgAlarm && <span className="text-[10px] bg-amber-100 text-amber-900 px-2 rounded">{nodeData.customConfig.asgAlarm.state}</span>}
       {nodeData.customConfig?.asgRuntime && <span className="text-[10px] bg-blue-100 text-blue-900 px-2 rounded">Desired: {nodeData.customConfig.asgRuntime.desired}</span>}
       {asgInstance && <span className={`text-[10px] rounded px-2 py-0.5 mb-1 ${asgInstance.state === 'InService' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800 motion-safe:animate-pulse'}`}>{asgInstance.state}</span>}
-      {/* Target Handles (Left & Top) */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="target-left"
-        className="!w-2.5 !h-2.5 !bg-slate-400 hover:!bg-circuit-600 !border-2 !border-white transition-colors"
-      />
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="target-top"
-        className="!w-2.5 !h-2.5 !bg-slate-400 hover:!bg-circuit-600 !border-2 !border-white transition-colors"
-      />
+      <CompassHandles />
 
       {/* Official AWS Service Icon */}
       <div className="relative flex items-center justify-center">
@@ -83,29 +71,16 @@ export const ServiceNode = memo((props: any) => {
 
       {/* Clean Service Label under the icon (matches reference diagram) */}
       <div className="mt-1.5 px-1 leading-tight w-full min-w-0">
-        <span className="text-[12px] font-semibold text-slate-900 tracking-tight block [overflow-wrap:anywhere]">
+        <span className="text-[12px] font-semibold text-slate-900 dark:text-slate-100 tracking-tight block [overflow-wrap:anywhere]">
           {nodeData.label || serviceDef.name}
         </span>
         {nodeData.notes && (
-          <span className="text-[10px] text-slate-500 line-clamp-1 mt-0.5">
+          <span className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">
             {nodeData.notes}
           </span>
         )}
       </div>
 
-      {/* Source Handles (Right & Bottom) */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="source-right"
-        className="!w-2.5 !h-2.5 !bg-slate-400 hover:!bg-circuit-600 !border-2 !border-white transition-colors"
-      />
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="source-bottom"
-        className="!w-2.5 !h-2.5 !bg-slate-400 hover:!bg-circuit-600 !border-2 !border-white transition-colors"
-      />
     </div>
   );
 });

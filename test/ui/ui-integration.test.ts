@@ -917,6 +917,18 @@ test('Reference library exports source-compatible JSON and loads an independent 
     await act(async () => apiRef.current!.loadTemplate(reference.id, reference));
     assert.deepEqual(apiRef.current!.scenario, reference.scenario);
     assert.notEqual(apiRef.current!.nodes, reference.nodes);
+    await act(async () => {
+      apiRef.current!.setNodes(previous => previous.map((node, index) => index === 0 ? { ...node, position: { x: 123, y: 456 } } : node));
+      apiRef.current!.setScenario(previous => ({ ...previous, startNodeId: 'removed-start' }));
+    });
+    await act(async () => [...document.querySelectorAll('button')].find(b => b.textContent === 'Save as reference')!.click());
+    const updated = parseReference(saved);
+    assert.equal(updated.id, reference.id);
+    assert.equal(updated.description, reference.description);
+    assert.equal(updated.scenario!.startNodeId, '');
+    assert.deepEqual(updated.nodes[0].position, { x: 123, y: 456 });
+    assert.match(document.querySelector('[role="status"]')!.textContent!, /removed request start node was cleared/);
+
     // Import was removed - the JSON folder + rebuild is the only path to a permanent reference now.
     assert.equal(document.querySelector('[aria-label="Import reference JSON"]'), null);
   } finally { await act(async () => root.unmount()); (window as any).showSaveFilePicker = originalPicker; (globalThis as any).localStorage = originalStorage; window.confirm = originalConfirm; }
@@ -963,4 +975,206 @@ test('Lab 1 user IAM links illustrate authorization without replacing the S3 req
     await h.act(() => h.api().runScenario());
     assert.equal(h.api().simulationResult!.success, false, 'An authorization illustration must never grant access');
   } finally { window.alert = oldAlert; await h.unmount(); }
+});
+
+test('EKS explorer opens explicitly, nests pod containers, persists readiness and preserves other configuration', async () => {
+  const h = await mount(true);
+  try {
+    await h.act(() => h.api().addServiceNode('eks', { x: 0, y: 0 }));
+    const eks = h.api().nodes.filter(n => n.data.serviceId === 'eks').at(-1)!;
+    await h.act(() => h.api().updateNodeData(eks.id, { subnet: 'private', customConfig: { sentinel: 'keep', eks: { kind: 'workload', clusterName: 'learning', namespace: 'web', runningPods: 2, readyPods: 1 } } }));
+    await h.act(() => h.api().setSelectedNodeId(eks.id));
+    assert.equal(document.querySelector('[aria-label="EKS component details"]'), null);
+    const button = (text: string) => [...document.querySelectorAll('button')].find(b => b.textContent?.includes(text))!;
+    const opener = button('More information'); opener.focus();
+    await h.act(() => opener.click());
+    const cluster = document.querySelector('[aria-label="EKS cluster boundary"]')!;
+    const namespace = cluster.querySelector('[aria-label="EKS namespace boundary: web"]')!;
+    assert.ok(namespace.querySelector('[aria-label="EKS pod snapshot 1"] button'));
+    assert.match(namespace.querySelector('[aria-label="EKS pod snapshot 1"]')!.textContent!, /Container/);
+    await h.act(() => button('Deployment:').click());
+    await h.act(() => button('Make all pods Not Ready').click());
+    assert.equal(h.api().nodes.find(n => n.id === eks.id)!.data.customConfig!.eks.readyPods, 0);
+    assert.equal(h.api().nodes.find(n => n.id === eks.id)!.data.customConfig!.sentinel, 'keep');
+    assert.match(namespace.textContent!, /0 eligible endpoints/);
+    await h.act(() => button('HPA ·').click());
+    assert.equal((button('Apply estimate') as HTMLButtonElement).disabled, true);
+    await h.act(() => document.querySelector('[role="dialog"]')!.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    assert.equal(document.querySelector('[role="dialog"]'), null);
+    assert.equal(document.activeElement, opener);
+  } finally { await h.unmount(); }
+});
+
+test('Home page opens the lab and routes real issue/comment links without a fake submission form', async () => {
+  const { HomePage } = await import('../../src/components/home/HomePage.tsx');
+  const root = createRoot(document.getElementById('root')!);
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = (async () => ({ ok: true, json: async () => [
+    { login: 'CS-Sensei', type: 'User', avatar_url: 'https://avatars.githubusercontent.com/u/1?v=4', contributions: 10 },
+    { login: 'Copilot', type: 'Bot', avatar_url: 'https://avatars.githubusercontent.com/in/2?v=4', contributions: 1 },
+    { login: 'Namgay282004', type: 'User', avatar_url: 'https://avatars.githubusercontent.com/u/3?v=4', contributions: 1 },
+  ] })) as any;
+  let started = 0;
+  try {
+    await act(async () => root.render(React.createElement(HomePage, { onStart: () => { started++; } })));
+    await act(async () => { await new Promise(r => setTimeout(r, 0)); });
+    const start = [...document.querySelectorAll('button')].find(b => b.textContent?.includes('Start exploring'))!;
+    await act(async () => start.click());
+    assert.equal(started, 1);
+    for (const label of ['Report an issue', 'Leave a comment or idea']) {
+      const link = [...document.querySelectorAll('a')].find(a => a.textContent?.includes(label))!;
+      const url = new URL(link.href);
+      assert.equal(url.origin, 'https://github.com');
+      assert.equal(url.pathname, '/norbutlepcha25/cloud-architecture-lab/issues/new');
+      assert.ok(url.searchParams.get('body'));
+    }
+    assert.equal(document.querySelector('form'), null);
+    const guideRows = document.querySelectorAll('#guide tbody tr');
+    assert.ok(guideRows.length >= 15, 'interface guide lists every area');
+    assert.match(document.getElementById('save')!.textContent!, /Download JSON[\s\S]*Upload JSON[\s\S]*Save and resume a draft[\s\S]*Download the diagram as an image/);
+    const docLinks = [...document.querySelectorAll<HTMLAnchorElement>('#aws-docs a[href^="https://"]')].filter(a => !a.href.includes('github.com'));
+    assert.ok(docLinks.length >= 20);
+    for (const a of docLinks) assert.match(new URL(a.href).hostname, /^(docs\.)?aws\.amazon\.com$|^docs\.aws\.amazon\.com$/);
+    const natTab = [...document.querySelectorAll<HTMLButtonElement>('[role=tab]')].find(b => b.textContent === 'NAT gateway fails')!;
+    await act(async () => natTab.click());
+    assert.equal(natTab.getAttribute('aria-selected'), 'true');
+    assert.match(document.getElementById('home-scenario-panel')!.textContent!, /PARTIAL OUTAGE/);
+    assert.match(document.querySelector('.home-contributors')!.textContent!, /Namgay Wangchuk/);
+    assert.doesNotMatch(document.querySelector('.home-contributors ul')!.textContent!, /bot|claude|codex|agent|copilot/i);
+    const avatars = [...document.querySelectorAll<HTMLImageElement>('.home-contributors img')].map(img => img.src);
+    assert.deepEqual(avatars, ['https://avatars.githubusercontent.com/u/1?v=4&s=112', 'https://avatars.githubusercontent.com/u/3?v=4&s=112']);
+  } finally { globalThis.fetch = previousFetch; await act(async () => root.unmount()); }
+});
+
+test('EKS control-plane components have dedicated descriptions and editable management links', async () => {
+  const { REFERENCE_ARCHITECTURES } = await import('../../src/data/referenceArchitectures.ts');
+  const h = await mount(true);
+  try {
+    const ref = REFERENCE_ARCHITECTURES.find(r => r.id === 'eks-architecture')!;
+    await h.act(() => { h.api().setNodes(structuredClone(ref.nodes)); h.api().setEdges([]); h.api().setSelectedNodeId('eks-scheduler'); });
+    const panel = document.querySelector('[aria-label="EKS control-plane component details"]')!;
+    assert.match(panel.textContent!, /AWS-managed control plane/);
+    assert.match(panel.textContent!, /records node bindings/);
+    assert.doesNotMatch(panel.textContent!, /Regional Virtual Network/);
+    await h.act(() => h.api().onConnect({ source: 'eks-api', target: 'eks-scheduler', sourceHandle: 'source-right', targetHandle: 'target-left' }));
+    assert.equal(h.api().edges.length, 1);
+    assert.equal(h.api().edges[0].data!.relationship, 'manages');
+    assert.equal(h.api().edges[0].data!.protocol, 'HTTPS');
+    await h.act(() => h.api().onConnect({ source: 'eks-api', target: 'eks-vpc', sourceHandle: null, targetHandle: null }));
+    assert.equal(h.api().edges.length, 1, 'ordinary network boundaries remain non-connectable');
+    await h.act(() => h.api().onConnect({ source: 'eks-api', target: 'eks-scheduler', sourceHandle: 'source-right', targetHandle: 'target-left' }));
+    assert.equal(h.api().edges.length, 1, 'duplicates ignored');
+  } finally { await h.unmount(); }
+});
+
+test('Connection sides can be edited without losing settings, and persist through draft restore', async () => {
+  const h = await mount(true);
+  try {
+    await h.act(() => h.api().setNodes(['app', 'db', 'other-db'].map(id => ({ id, type: 'serviceNode', position: { x: 0, y: 0 }, data: { serviceId: id === 'app' ? 'ec2' : 'rds', label: id, category: 'Compute', subnet: 'private', az: 'AZ-A', health: 'healthy' } })) as any));
+    await h.act(() => h.api().onConnect({ source: 'app', target: 'db', sourceHandle: 'source-right', targetHandle: 'target-left' }));
+    const id = h.api().edges[0].id;
+    await h.act(() => { h.api().updateEdgeData(id, { label: 'Database query', stepNumber: 4 }); h.api().setSelectedEdgeId(id); });
+    const before = structuredClone(h.api().edges[0]);
+    const choose = async (label: string, value: string) => {
+      const select = document.querySelector(`select[aria-label="${label}"]`) as HTMLSelectElement;
+      assert.ok(select);
+      await h.act(() => { select.value = value; select.dispatchEvent(new dom.window.Event('change', { bubbles: true })); });
+    };
+    await choose('Source side', 'bottom'); await choose('Target side', 'top');
+    const edited = h.api().edges[0];
+    assert.equal(edited.id, before.id); assert.deepEqual(edited.data, before.data);
+    assert.equal(edited.sourceHandle, 'bottom'); assert.equal(edited.targetHandle, 'top');
+    const draft = h.api().exportDraft();
+    await h.act(() => h.api().importDraft(draft));
+    assert.equal(h.api().edges[0].sourceHandle, 'bottom'); assert.equal(h.api().edges[0].targetHandle, 'top');
+    const restoredData = structuredClone(h.api().edges[0].data);
+    await h.act(() => h.api().onReconnect(h.api().edges[0], { source: 'app', target: 'other-db', sourceHandle: 'source-left', targetHandle: 'target-right' }));
+    assert.equal(h.api().edges[0].id, id); assert.equal(h.api().edges[0].target, 'other-db');
+    assert.deepEqual(h.api().edges[0].data, restoredData);
+  } finally { await h.unmount(); }
+});
+
+test('Reconnection rejects incompatible resources and self loops while preserving EKS annotation side edits', async () => {
+  const h = await mount(); const oldAlert = window.alert; window.alert = () => {};
+  try {
+    const { REFERENCE_ARCHITECTURES } = await import('../../src/data/referenceArchitectures.ts');
+    const ref = REFERENCE_ARCHITECTURES.find(r => r.id === 'eks-architecture')!;
+    await h.act(() => { h.api().setNodes(structuredClone(ref.nodes)); h.api().setEdges(structuredClone(ref.edges)); });
+    const original = h.api().edges.find(e => e.target === 'eks-pod-a1')!;
+    await h.act(() => h.api().onReconnect(original, { source: original.source, target: original.target, sourceHandle: 'source-bottom', targetHandle: 'target-top' }));
+    assert.equal(h.api().edges.find(e => e.id === original.id)!.targetHandle, 'target-top');
+    const before = structuredClone(h.api().edges);
+    await h.act(() => h.api().onReconnect(original, { source: original.source, target: 'eks-vpc', sourceHandle: 'source-bottom', targetHandle: 'target-top' }));
+    assert.deepEqual(h.api().edges, before);
+    await h.act(() => h.api().onReconnect(original, { source: original.source, target: original.source, sourceHandle: null, targetHandle: null }));
+    assert.deepEqual(h.api().edges, before);
+  } finally { window.alert = oldAlert; await h.unmount(); }
+});
+
+
+test('Compass connections expose exactly eight shared dots and resolve legacy saved handles', async () => {
+  const { CompassHandles } = await import('../../src/components/canvas/CompassHandles.tsx');
+  const { compassHandleId } = await import('../../src/utils/compassHandles.ts');
+  const { ReactFlowProvider } = await import('@xyflow/react');
+  const container = document.createElement('div');
+  const root = createRoot(container);
+  await act(async () => { root.render(React.createElement(ReactFlowProvider, null, React.createElement(CompassHandles))); });
+  const dots = [...container.querySelectorAll('.react-flow__handle')];
+  await act(async () => { root.unmount(); });
+  assert.equal(dots.length, 8);
+  assert.ok(dots.every(dot => dot.classList.contains('compass-handle') && dot.querySelector('svg[aria-hidden="true"] path')), 'Every shared dot carries a move glyph without adding connection handles');
+  assert.deepEqual(dots.map(dot => dot.getAttribute('data-handleid')), ['top', 'top-right', 'right', 'bottom-right', 'bottom', 'bottom-left', 'left', 'top-left']);
+  for (const side of ['top', 'right', 'bottom', 'left']) {
+    assert.equal(compassHandleId(`source-${side}`, 'source'), side);
+    assert.equal(compassHandleId(`target-${side}`, 'target'), side);
+  }
+  assert.equal(compassHandleId('top-right', 'target'), 'top-right');
+  assert.equal(compassHandleId(null, 'source'), 'right');
+  assert.equal(compassHandleId(null, 'target'), 'left');
+});
+
+test('Canvas lab save appears only for loaded labs and exports live edits with lab metadata', async () => {
+  const { SaveLabDiagram } = await import('../../src/components/labs/SaveLabDiagram.tsx');
+  const originalPicker = (window as any).showSaveFilePicker;
+  let saved = ''; let filename = '';
+  (window as any).showSaveFilePicker = async (options: any) => {
+    filename = options.suggestedName;
+    return { createWritable: async () => ({ write: async (text: string) => { saved = text; }, close: async () => {} }) };
+  };
+  const root = createRoot(document.getElementById('root')!);
+  const apiRef: { current: Api | null } = { current: null };
+  try {
+    await act(async () => root.render(React.createElement(ArchitectureProvider, null, React.createElement(Harness, { apiRef }), React.createElement(SaveLabDiagram))));
+    assert.equal(document.querySelector('button'), null);
+    const lab = COURSE_LABS.find(item => item.references.some(ref => ref.configurationChecks))!;
+    const reference = lab.references.find(ref => ref.configurationChecks)!;
+    await act(async () => apiRef.current!.openLabReference(reference));
+    assert.equal(document.querySelector('button')!.textContent, 'Save lab diagram');
+    await act(async () => {
+      apiRef.current!.setNodes(previous => previous.map((node, index) => index === 0 ? { ...node, position: { x: 321, y: 654 }, data: { ...node.data, label: 'Edited lab component' } } : node));
+      apiRef.current!.setEdges(previous => previous.map(edge => ({ ...edge, sourceHandle: 'bottom-right', targetHandle: 'top-left' })));
+      apiRef.current!.setScenario(previous => ({ ...previous, startNodeId: 'removed-start', path: '/edited' }));
+    });
+    await act(async () => document.querySelector('button')!.click());
+    const exported = JSON.parse(saved);
+    assert.equal(filename, `${String(lab.number).padStart(2, '0')}-${reference.id}.json`);
+    assert.equal(exported.id, reference.id);
+    assert.equal(exported.expected, reference.expected);
+    assert.equal(exported.description, reference.description);
+    assert.deepEqual(exported.configurationChecks, reference.configurationChecks);
+    assert.deepEqual(exported.nodes[0].position, { x: 321, y: 654 });
+    assert.equal(exported.nodes[0].data.label, 'Edited lab component');
+    assert.deepEqual(exported.edges, JSON.parse(JSON.stringify(apiRef.current!.edges)));
+    assert.equal(exported.scenario.startNodeId, '');
+    assert.equal(exported.scenario.path, '/edited');
+    const authorizationRef = COURSE_LABS.flatMap(item => item.references).find(ref => ref.authorization)!;
+    await act(async () => apiRef.current!.openLabReference(authorizationRef));
+    await act(async () => document.querySelector('button')!.click());
+    assert.deepEqual(JSON.parse(saved).authorization, authorizationRef.authorization);
+    await act(async () => apiRef.current!.loadTemplate('eks-architecture'));
+    assert.equal(document.querySelector('button'), null);
+  } finally {
+    await act(async () => root.unmount());
+    (window as any).showSaveFilePicker = originalPicker;
+  }
 });
